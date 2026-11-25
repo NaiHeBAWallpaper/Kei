@@ -1,6 +1,6 @@
 CH0335_home.png
 	size: 2048, 2048
-	filter: Linear, Linear
+	filter:MipMapLinearLinear,Linear
 	scale: 0.7
 B_Hair_01
 	bounds: 1411, 1182, 233, 100
@@ -512,7 +512,7 @@ ear
 
 CH0335_home_2.png
 	size: 2048, 2048
-	filter: Linear, Linear
+	filter:MipMapLinearLinear,Linear
 	scale: 0.7
 BG/BG
 	bounds: 2, 1248, 973, 723
@@ -563,7 +563,7 @@ BG/FX_Diffuse Light_02
 
 CH0335_home_3.png
 	size: 2048, 2048
-	filter: Linear, Linear
+	filter:MipMapLinearLinear,Linear
 	scale: 0.7
 intro/BG_City_FX_intro
 	bounds: 1322, 227, 256, 158
