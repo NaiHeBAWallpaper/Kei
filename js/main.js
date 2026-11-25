@@ -2,9 +2,14 @@ let canvas, textbox, gl, shader, batcher, assetManager, skeletonRenderer;
 let mvp = new spine.Matrix4();
 
 let lastFrameTime;
+let initialLoadTimer;
+let modelFrame;
+let renderFrame;
+let renderTimer;
+let loadingResolution;
 let spineData;
 
-let customScale = 0.8;
+let customScale = 1;
 let targetFps = 60;
 let bgmfile = './assets/audio/Theme_341.ogg';
 let bgmvolume = 0;
@@ -40,10 +45,6 @@ let isVoicelinePlaying = false;
 
 const CHARACTER = 'CH0335';
 let modelResolution = '8k';
-let loadingResolution;
-let modelFrame;
-let renderTimer;
-let renderFrame;
 const HAS_A = { eye: false, point: true };
 
 // Subtitles follow the Talk events in each Spine animation.
@@ -507,7 +508,7 @@ function init() {
 
 			// 监听模型分辨率设置
 			if (props.modelresolution) modelResolution = props.modelresolution.value;
-			if (typeof introAnimation !== 'undefined' && !modelFrame && loadingResolution !== modelResolution) {
+			if (assetManager && typeof introAnimation !== 'undefined' && !modelFrame && loadingResolution !== modelResolution) {
 				reloadModel();
 			}
 
@@ -604,9 +605,15 @@ function init() {
 	skeletonRenderer = new spine.SkeletonRenderer(gl);
 	assetManager = new spine.AssetManager(gl);
 
+	initialLoadTimer = setTimeout(() => {
+		if (typeof introAnimation === 'undefined') introAnimation = true;
+		if (loadingResolution === undefined && !modelFrame) reloadModel();
+	}, 350);
+
 	window.addEventListener('pagehide', event => {
 		if (event.persisted) return;
 		canvas.style.visibility = 'hidden';
+		clearTimeout(initialLoadTimer);
 		cancelAnimationFrame(modelFrame);
 		cancelAnimationFrame(renderFrame);
 		clearTimeout(renderTimer);
@@ -620,6 +627,7 @@ let introTimeouts = [];
 
 // Function to reload the model with a new resolution
 function reloadModel() {
+	if (!assetManager || modelFrame) return;
 	if (mouseSelect === 1 || mouseSelect === 4) mouseSelect = -1;
 	headpatOrigin = null;
 	headpatTarget.set(0, 0);
@@ -634,7 +642,6 @@ function reloadModel() {
 		bgm = null;
 	}
 
-	slotsHidden = false;
 
 	// Stop all intro audio and clear related timeouts
 	introAudioIsPlaying = false;
@@ -674,9 +681,8 @@ function reloadModel() {
 	spineData = null;
 	assetManager.removeAll();
 	loadingResolution = modelResolution;
-	const base = new URL(`assets/${loadingResolution}/${CHARACTER}_home`, document.baseURI).href;
-	const binaryPath = base + '.skel';
-	const atlasPath = base + '.atlas';
+	const binaryPath = new URL(`assets/${modelResolution}/${CHARACTER}_home.skel`, document.baseURI).href;
+	const atlasPath = new URL(`assets/${modelResolution}/${CHARACTER}_home.atlas`, document.baseURI).href;
 	assetManager.loadBinary(binaryPath);
 	assetManager.loadTextureAtlas(atlasPath);
 	function waitForAssets() {
@@ -692,7 +698,8 @@ function reloadModel() {
 		if (assetManager.get(binaryPath) && assetManager.get(atlasPath)) {
 			load(binaryPath, atlasPath);
 		} else {
-			console.error('Model assets not found for resolution: ' + modelResolution);
+			console.error('Model assets not found for resolution: ' + loadingResolution);
+			loadingResolution = undefined;
 		}
 	}
 	modelFrame = requestAnimationFrame(waitForAssets);
@@ -722,9 +729,6 @@ function interactionLoad() {
 
 function load(dynamicBinaryPath, dynamicAtlasPath) {
 	spineData = loadSpineData(dynamicBinaryPath, dynamicAtlasPath, false);
-
-	// 在设置动画之前隐藏指定的骨骼
-	// hideSpecifiedSlots();
 
 	// User Option to skip Intro Animation
 	if (introAnimation) {
@@ -757,8 +761,26 @@ function load(dynamicBinaryPath, dynamicAtlasPath) {
 	}
 
 	lastFrameTime = Date.now() / 1000;
+	// Call render every frame.
 	render();
 	canvas.style.visibility = 'visible';
+}
+
+const GLARE_SLOTS = new Set([
+	"BG_FX_Lensflare2", "BG_FX_SunFlare", "FX_SunFlare_03", "FX_SunFlare_02",
+	"FX_SunFlare_01"
+]);
+const GLARE_OPACITY = 0.7;
+
+// Scale attachment opacity once so animated slot colors still control the light.
+function applyGlareOpacity(skeletonData) {
+	for (const skin of skeletonData.skins) {
+		for (const { slotIndex, attachment } of skin.getAttachments()) {
+			const slot = skeletonData.slots[slotIndex];
+			if (!GLARE_SLOTS.has(slot.name) || slot.blendMode !== 1 || !attachment.color) continue;
+			attachment.color.a *= GLARE_OPACITY;
+		}
+	}
 }
 
 function loadSpineData(binaryPath, atlasPath, premultipliedAlpha) {
@@ -774,6 +796,7 @@ function loadSpineData(binaryPath, atlasPath, premultipliedAlpha) {
 	// Set the scale to apply during parsing, parse the file, and create a new skeleton.
 	skeletonBinary.scale = 1;
 	let skeletonData = skeletonBinary.readSkeletonData(assetManager.get(binaryPath));
+	applyGlareOpacity(skeletonData);
 	let skeleton = new spine.Skeleton(skeletonData);
 	let bounds = calculateSetupPoseBounds(skeleton);
 
@@ -795,34 +818,8 @@ function calculateSetupPoseBounds(skeleton) {
 	return { offset: offset, size: size };
 }
 
-let slotsHidden = false;
 
-// 定义需要隐藏的骨骼名称列表（全局变量）
-const slotsToHide = [
-	""
-];
 
-function hideSpecifiedSlots() {
-	if (spineData && spineData.skeleton) {
-		let foundSlots = 0;
-		let totalSlots = slotsToHide.length;
-
-		// 遍历并隐藏所有指定的骨骼（每次渲染都执行）
-		slotsToHide.forEach(slotName => {
-			let slot = spineData.skeleton.findSlot(slotName);
-			if (slot) {
-				slot.setAttachment(null);
-				foundSlots++;
-			}
-		});
-
-		// 只在首次执行时显示调试信息
-		// if (!slotsHidden) {
-		// 	console.log("总共尝试隐藏 " + totalSlots + " 个骨骼，成功隐藏 " + foundSlots + " 个");
-		// 	slotsHidden = true;
-		// }
-	}
-}
 
 function render() {
 	let now = Date.now() / 1000;
@@ -841,9 +838,6 @@ function render() {
 		let premultipliedAlpha = spineData.premultipliedAlpha;
 		state.update(delta);
 		state.apply(skeleton);
-
-		// 在渲染时检查并隐藏指定的骨骼
-		// hideSpecifiedSlots();
 
 		const pointX = TPoint.x;
 		const pointY = TPoint.y;

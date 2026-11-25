@@ -5,8 +5,8 @@
     <title>Blue Archive</title>
     <style>
       html {
-        background: #554e55 url("assets/loading.jpg") center / cover no-repeat fixed;
-        /* The 16:10 frame was captured at the minimum wallpaper scale (0.7). */
+        background: #4d4d4d var(--wallpaper-cover, url("assets/loading.jpg")) center / cover no-repeat fixed;
+        /* The loading frame was captured at a wallpaper scale of 0.7. */
         background-size: calc(max(100vw, 160vh) * var(--wallpaper-scale, 0.8) / 0.7) auto;
       }
       #canvas { visibility: hidden; }
